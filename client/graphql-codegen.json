@@ -1,0 +1,1 @@
+{"overwrite":true,"schema":"http://localhost:4266","documents":"src/**/*.graphql","generates":{"src/app/graphql/graphql.ts":{"plugins":["typescript","typescript-operations","typescript-apollo-angular"]},"./graphql.schema.json":{"plugins":["introspection"]}}}
