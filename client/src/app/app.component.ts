@@ -1,4 +1,6 @@
 import { Component } from '@angular/core';
+import { RoleService } from './graphql/role/role.service';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-root',
@@ -7,4 +9,8 @@ import { Component } from '@angular/core';
 })
 export class AppComponent {
   title = 'app';
+  roles$: Observable<any[]> = this.roleService.baseRead();
+  constructor(private roleService: RoleService) {
+
+  }
 }

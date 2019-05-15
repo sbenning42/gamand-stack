@@ -1,3 +1,24 @@
-query BaseGetAllRoles() {
-    
-} 
+query BaseReadRoles {
+    Role {
+        name
+        ring
+    }    
+}
+mutation BaseCreateRole($name: String!, $ring: Int!) {
+    CreateRole(name: $name, ring: $ring) {
+        name
+        ring
+    }
+}
+mutation BaseUpdateRole($name: String!, $ring: Int) {
+    UpdateRole(name: $name, ring: $ring) {
+        name
+        ring
+    }
+}
+mutation BaseDeleteRole($name: String!) {
+    DeleteRole(name: $name) {
+        name
+        ring
+    }
+}

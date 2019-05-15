@@ -1,0 +1,24 @@
+query BaseReadUsers {
+    User {
+        email
+        name
+    }    
+}
+mutation BaseCreateUser($email: Stname!, $name: Int!) {
+    CreateUser(email: $email, name: $name) {
+        email
+        name
+    }
+}
+mutation BaseUpdateUser($email: Stname!, $name: Int) {
+    UpdateUser(email: $email, name: $name) {
+        email
+        name
+    }
+}
+mutation BaseDeleteUser($email: Stname!) {
+    DeleteUser(email: $email) {
+        email
+        name
+    }
+}
