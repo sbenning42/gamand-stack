@@ -29,6 +29,11 @@ export class AuthHandler {
                 (user)-[:HAS_ROLE]->(role)
             RETURN user { ._id, .email, .name } as user
         `,
+        isAdminUser: (email: string) => `
+                MATCH (user: User { email: "${email}" })-[:HAS_ROLE]->(role: Role { name: "admin" })
+                RETURN user
+                LIMIT 1
+        `,
         invalidateToken: (token: string) => `
             CREATE (invalidToken: InvalidToken { token: "${token}" })
             RETURN invalidToken
@@ -55,6 +60,11 @@ export class AuthHandler {
                 .then(({ records: { 0: result } }) => {
                     return result && result.get('user');
                 });
+        },
+        isAdminUser: (email: string) => {
+            const session = this.driver.session();
+            return session.run(this.cypherQueries.isAdminUser(email))
+                .then(({ records: { 0: result } }) => result && result.get('user'));
         },
         invalidateToken: (token: string) => {
             const session = this.driver.session();
@@ -241,6 +251,27 @@ export class AuthHandler {
             }
             next();
         };
+    }
+
+    /**
+     * Is Admin Resolvers middleware
+     */
+    isAdmin(req: Request, res: Response) {
+        const user = req['user'];
+        return this.runCypherQueries.isAdminUser(user && user.email)
+            .then(user => {
+                if (!user) {
+                    res.status(401);
+                    throw new Error('Not authorized');
+                } else {
+                    req['admin'] = true;
+                    return req;
+                }
+            })
+            .catch(error => {
+                res.status(401);
+                throw new Error('Not authorized');
+            });
     }
 
     /**

@@ -1,13 +1,12 @@
 import fs from 'fs';
 import dotenv from 'dotenv';
-import cors from 'cors';
-import bodyParser from 'body-parser';
 import express from 'express';
 import { v1 as Neo4j } from 'neo4j-driver';
 import { ApolloServer } from 'apollo-server-express';
 import { makeAugmentedSchema } from 'neo4j-graphql-js';
 
 import { AuthHandler } from './auth/auth-handler';
+import { resolvers } from './resolvers';
 
 /**
  * Load .env file
@@ -23,7 +22,6 @@ const { SRV_PATH, SRV_PORT, NEO_URI, NEO_USR, NEO_PWD, GQL_FILE, PLAYGROUND } = 
  * Instanciate express Application, Neo4j driver and custom AuthHandler helper.
  */
 const app = express();
-app.use(cors(), bodyParser.urlencoded({ extended: true }), bodyParser.json());
 
 const driver = Neo4j.driver(NEO_URI, Neo4j.auth.basic(NEO_USR, NEO_PWD));
 const auth = new AuthHandler(driver);
@@ -55,17 +53,18 @@ Object.keys(endpoints).forEach(endpoint => app.use(endpoint, ...endpoints[endpoi
  * You can add resolver's middleware into the `context` function.
  * 
  * You can exclude generated queries / mutations from GQL_FILE by passing them as `exclude` to `config` object.
- * You may define your own resolvers for excluded queries / mutations by passing them to the `resolvers` object.
+ * You may define your own resolvers (or extends the generated ones) by passing them to the `resolvers` object.
+ *  
  */
 const server = new ApolloServer({
     playground: !!PLAYGROUND,
-    context: ({ req }) => ({ req, driver }),
+    context: ({ req, res }) => ({ req, res, driver, auth }),
     schema: makeAugmentedSchema({
         typeDefs: fs.readFileSync(GQL_FILE, 'utf8'),
-        resolvers: {},
+        resolvers: resolvers,
         config: {
             query: { exclude: [] },
-            mutation: { exclude: ['User', 'Role'] }
+            mutation: { exclude: [] }
         }
     }),
 });
