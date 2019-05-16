@@ -245,7 +245,14 @@ export class AuthHandler {
      */
     isAuthenticated() {
         return (req: Request, res: Response, next: NextFunction) => {
+            const operationName = req.body.operationName;
+            if (operationName === 'IntrospectionQuery' || (req.body.query && req.body.query.includes('query IntrospectionQuery'))) {
+                console.log('You shall pass !');
+                next();
+                return ;
+            }
             if (!req['authenticated']) {
+                console.log('You shall NOT pass !', req.body);
                 res.status(401).send({ message: 'Not authorized' });
                 return ;
             }

@@ -1,6 +1,8 @@
 import fs from 'fs';
 import dotenv from 'dotenv';
 import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
 import { v1 as Neo4j } from 'neo4j-driver';
 import { ApolloServer } from 'apollo-server-express';
 import { makeAugmentedSchema } from 'neo4j-graphql-js';
@@ -33,7 +35,12 @@ const auth = new AuthHandler(driver);
  * This JWT can either be added as Bearer Authorization header or as the `token` query param.
  */
 const endpoints = {
-    '*': [auth.auth()],
+    '*': [
+        cors(),
+        bodyParser.urlencoded({ extended: true }),
+        bodyParser.json(),
+        auth.auth()
+    ],
     '/signup': [auth.signup()],
     '/signin': [auth.signin()],
     '/signout': [auth.isAuthenticated(), auth.signout()],

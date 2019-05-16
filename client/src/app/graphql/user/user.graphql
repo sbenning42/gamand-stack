@@ -4,19 +4,35 @@ query BaseReadUsers {
         name
     }    
 }
-mutation BaseCreateUser($email: Stname!, $name: Int!) {
+mutation BaseCreateUser($email: String!, $name: String!) {
     CreateUser(email: $email, name: $name) {
         email
         name
     }
+    AddRoleUsers(from: { name: "user" }, to: { email: $email }) {
+        to { email }
+        from { name }
+    }
 }
-mutation BaseUpdateUser($email: Stname!, $name: Int) {
+mutation BaseAddRoleUsers($from: _RoleInput! $to: _UserInput!) {
+    AddRoleUsers(from: $from, to: $to) {
+        to { email }
+        from { name }
+    }
+}
+mutation BaseRemoveRoleUsers($from: _RoleInput! $to: _UserInput!) {
+    RemoveRoleUsers(from: $from, to: $to) {
+        to { email }
+        from { name }
+    }
+}
+mutation BaseUpdateUser($email: String! $name: String) {
     UpdateUser(email: $email, name: $name) {
         email
         name
     }
 }
-mutation BaseDeleteUser($email: Stname!) {
+mutation BaseDeleteUser($email: String!) {
     DeleteUser(email: $email) {
         email
         name

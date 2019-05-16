@@ -210,16 +210,6 @@ export type _UserFilter = {
   name_not_starts_with?: Maybe<Scalars["String"]>;
   name_ends_with?: Maybe<Scalars["String"]>;
   name_not_ends_with?: Maybe<Scalars["String"]>;
-  password?: Maybe<Scalars["String"]>;
-  password_not?: Maybe<Scalars["String"]>;
-  password_in?: Maybe<Array<Scalars["String"]>>;
-  password_not_in?: Maybe<Array<Scalars["String"]>>;
-  password_contains?: Maybe<Scalars["String"]>;
-  password_not_contains?: Maybe<Scalars["String"]>;
-  password_starts_with?: Maybe<Scalars["String"]>;
-  password_not_starts_with?: Maybe<Scalars["String"]>;
-  password_ends_with?: Maybe<Scalars["String"]>;
-  password_not_ends_with?: Maybe<Scalars["String"]>;
   roles?: Maybe<_RoleFilter>;
   roles_not?: Maybe<_RoleFilter>;
   roles_in?: Maybe<Array<_RoleFilter>>;
@@ -240,9 +230,7 @@ export enum _UserOrdering {
   EmailAsc = "email_asc",
   EmailDesc = "email_desc",
   NameAsc = "name_asc",
-  NameDesc = "name_desc",
-  PasswordAsc = "password_asc",
-  PasswordDesc = "password_desc"
+  NameDesc = "name_desc"
 }
 
 export type Mutation = {
@@ -285,13 +273,11 @@ export type MutationRemoveRoleUsersArgs = {
 export type MutationCreateUserArgs = {
   email: Scalars["String"];
   name?: Maybe<Scalars["String"]>;
-  password?: Maybe<Scalars["String"]>;
 };
 
 export type MutationUpdateUserArgs = {
   email: Scalars["String"];
   name?: Maybe<Scalars["String"]>;
-  password?: Maybe<Scalars["String"]>;
 };
 
 export type MutationDeleteUserArgs = {
@@ -327,7 +313,6 @@ export type QueryUserArgs = {
   _id?: Maybe<Scalars["String"]>;
   email?: Maybe<Scalars["String"]>;
   name?: Maybe<Scalars["String"]>;
-  password?: Maybe<Scalars["String"]>;
   first?: Maybe<Scalars["Int"]>;
   offset?: Maybe<Scalars["Int"]>;
   orderBy?: Maybe<Array<Maybe<_UserOrdering>>>;
@@ -352,7 +337,6 @@ export type User = {
   _id?: Maybe<Scalars["String"]>;
   email: Scalars["String"];
   name?: Maybe<Scalars["String"]>;
-  password?: Maybe<Scalars["String"]>;
   roles: Array<Maybe<Role>>;
 };
 
@@ -394,6 +378,74 @@ export type BaseDeleteRoleMutationVariables = {
 
 export type BaseDeleteRoleMutation = { __typename?: "Mutation" } & {
   DeleteRole: Maybe<{ __typename?: "Role" } & Pick<Role, "name" | "ring">>;
+};
+
+export type BaseReadUsersQueryVariables = {};
+
+export type BaseReadUsersQuery = { __typename?: "Query" } & {
+  User: Maybe<
+    Array<Maybe<{ __typename?: "User" } & Pick<User, "email" | "name">>>
+  >;
+};
+
+export type BaseCreateUserMutationVariables = {
+  email: Scalars["String"];
+  name: Scalars["String"];
+};
+
+export type BaseCreateUserMutation = { __typename?: "Mutation" } & {
+  CreateUser: Maybe<{ __typename?: "User" } & Pick<User, "email" | "name">>;
+  AddRoleUsers: Maybe<
+    { __typename?: "_AddRoleUsersPayload" } & {
+      to: Maybe<{ __typename?: "User" } & Pick<User, "email">>;
+      from: Maybe<{ __typename?: "Role" } & Pick<Role, "name">>;
+    }
+  >;
+};
+
+export type BaseAddRoleUsersMutationVariables = {
+  from: _RoleInput;
+  to: _UserInput;
+};
+
+export type BaseAddRoleUsersMutation = { __typename?: "Mutation" } & {
+  AddRoleUsers: Maybe<
+    { __typename?: "_AddRoleUsersPayload" } & {
+      to: Maybe<{ __typename?: "User" } & Pick<User, "email">>;
+      from: Maybe<{ __typename?: "Role" } & Pick<Role, "name">>;
+    }
+  >;
+};
+
+export type BaseRemoveRoleUsersMutationVariables = {
+  from: _RoleInput;
+  to: _UserInput;
+};
+
+export type BaseRemoveRoleUsersMutation = { __typename?: "Mutation" } & {
+  RemoveRoleUsers: Maybe<
+    { __typename?: "_RemoveRoleUsersPayload" } & {
+      to: Maybe<{ __typename?: "User" } & Pick<User, "email">>;
+      from: Maybe<{ __typename?: "Role" } & Pick<Role, "name">>;
+    }
+  >;
+};
+
+export type BaseUpdateUserMutationVariables = {
+  email: Scalars["String"];
+  name?: Maybe<Scalars["String"]>;
+};
+
+export type BaseUpdateUserMutation = { __typename?: "Mutation" } & {
+  UpdateUser: Maybe<{ __typename?: "User" } & Pick<User, "email" | "name">>;
+};
+
+export type BaseDeleteUserMutationVariables = {
+  email: Scalars["String"];
+};
+
+export type BaseDeleteUserMutation = { __typename?: "Mutation" } & {
+  DeleteUser: Maybe<{ __typename?: "User" } & Pick<User, "email" | "name">>;
 };
 
 import gql from "graphql-tag";
@@ -471,4 +523,128 @@ export class BaseDeleteRoleGQL extends Apollo.Mutation<
   BaseDeleteRoleMutationVariables
 > {
   document = BaseDeleteRoleDocument;
+}
+export const BaseReadUsersDocument = gql`
+  query BaseReadUsers {
+    User {
+      email
+      name
+    }
+  }
+`;
+
+@Injectable({
+  providedIn: "root"
+})
+export class BaseReadUsersGQL extends Apollo.Query<
+  BaseReadUsersQuery,
+  BaseReadUsersQueryVariables
+> {
+  document = BaseReadUsersDocument;
+}
+export const BaseCreateUserDocument = gql`
+  mutation BaseCreateUser($email: String!, $name: String!) {
+    CreateUser(email: $email, name: $name) {
+      email
+      name
+    }
+    AddRoleUsers(from: { name: "user" }, to: { email: $email }) {
+      to {
+        email
+      }
+      from {
+        name
+      }
+    }
+  }
+`;
+
+@Injectable({
+  providedIn: "root"
+})
+export class BaseCreateUserGQL extends Apollo.Mutation<
+  BaseCreateUserMutation,
+  BaseCreateUserMutationVariables
+> {
+  document = BaseCreateUserDocument;
+}
+export const BaseAddRoleUsersDocument = gql`
+  mutation BaseAddRoleUsers($from: _RoleInput!, $to: _UserInput!) {
+    AddRoleUsers(from: $from, to: $to) {
+      to {
+        email
+      }
+      from {
+        name
+      }
+    }
+  }
+`;
+
+@Injectable({
+  providedIn: "root"
+})
+export class BaseAddRoleUsersGQL extends Apollo.Mutation<
+  BaseAddRoleUsersMutation,
+  BaseAddRoleUsersMutationVariables
+> {
+  document = BaseAddRoleUsersDocument;
+}
+export const BaseRemoveRoleUsersDocument = gql`
+  mutation BaseRemoveRoleUsers($from: _RoleInput!, $to: _UserInput!) {
+    RemoveRoleUsers(from: $from, to: $to) {
+      to {
+        email
+      }
+      from {
+        name
+      }
+    }
+  }
+`;
+
+@Injectable({
+  providedIn: "root"
+})
+export class BaseRemoveRoleUsersGQL extends Apollo.Mutation<
+  BaseRemoveRoleUsersMutation,
+  BaseRemoveRoleUsersMutationVariables
+> {
+  document = BaseRemoveRoleUsersDocument;
+}
+export const BaseUpdateUserDocument = gql`
+  mutation BaseUpdateUser($email: String!, $name: String) {
+    UpdateUser(email: $email, name: $name) {
+      email
+      name
+    }
+  }
+`;
+
+@Injectable({
+  providedIn: "root"
+})
+export class BaseUpdateUserGQL extends Apollo.Mutation<
+  BaseUpdateUserMutation,
+  BaseUpdateUserMutationVariables
+> {
+  document = BaseUpdateUserDocument;
+}
+export const BaseDeleteUserDocument = gql`
+  mutation BaseDeleteUser($email: String!) {
+    DeleteUser(email: $email) {
+      email
+      name
+    }
+  }
+`;
+
+@Injectable({
+  providedIn: "root"
+})
+export class BaseDeleteUserGQL extends Apollo.Mutation<
+  BaseDeleteUserMutation,
+  BaseDeleteUserMutationVariables
+> {
+  document = BaseDeleteUserDocument;
 }
