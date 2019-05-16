@@ -14,15 +14,12 @@ export class Auth {
         const session = this.driver.session();
         return session.run(`
             MATCH (user: User { email: "${email}" })
-            RETURN user
+            RETURN user { .email, .name, .password } as user
             LIMIT 1
         `)
             .then(({ records: { 0: result } }) => {
                 const user = result && result.get('user');
                 return user;
-            })
-            .catch(error => {
-                console.log(error);
             })
             .finally(() => session.close());
     }
@@ -34,14 +31,11 @@ export class Auth {
             CREATE
                 (user: User { email: "${email}", password: "${password}", name: "${name}" }),
                 (user)-[: HAS_ROLE { createdAT: date() }]->(role)
-            RETURN user { .email .name } as user
+            RETURN user { .email, .name } as user
         `)
             .then(({ records: { 0: result } }) => {
                 const user = result && result.get('user');
                 return user;
-            })
-            .catch(error => {
-                console.log(error);
             })
             .finally(() => session.close());
     }
@@ -106,18 +100,51 @@ export class Auth {
                     return ;
                 }
                 this.createUser(email, password, name).then(created => {
-                    if (!created) {
-                        res.status(500).send({ message: `Something went wrong` });
+                    if (created) {
+                        res.send({ user: created });
                         return ;
                     }
-                    res.send({ user: created });
-                })
+                    res.status(500).send({ message: `Something went wrong` });
+                }, error => {
+                    console.log(error);
+                    res.status(500).send({ message: `Something went wrong` });
+                });
+            }, error => {
+                console.log(error);
+                res.status(500).send({ message: `Something went wrong` });
             });
         };
     }
 
     signin() {
         return (req: Request, res: Response, next: NextFunction) => {
+            const fields = ['email', 'password'];
+            const missing = fields.filter(field => !Object.keys(req.body).includes(field));
+            const { email, password } = req.body;
+            if (missing.length > 0) {
+                res.status(400).send({ message: `Missing fields ${missing}` });
+                return ;
+            }
+            this.userByEmail(email).then(user => {
+                if (!user || user.password !== password) {
+                    res.status(401).send({ message: `Wrong credentials` });
+                    return ;
+                }
+                const token = this.encodeJWT(user, {});
+                this.createUser(email, password, name).then(created => {
+                    if (created) {
+                        res.send({ user: created });
+                        return ;
+                    }
+                    res.status(500).send({ message: `Something went wrong` });
+                }, error => {
+                    console.log(error);
+                    res.status(500).send({ message: `Something went wrong` });
+                });
+            }, error => {
+                console.log(error);
+                res.status(500).send({ message: `Something went wrong` });
+            });
         };
     }
 
