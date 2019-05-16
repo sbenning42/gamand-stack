@@ -4,91 +4,155 @@ import { v1 as Neo4j } from 'neo4j-driver';
 
 export class AuthHandler {
 
+    /**
+     * use to encode / sign JWT
+     */
     private secret = process.env.JWT_SECRET;
     
-    cypherQueries = {
+    /**
+     * raw cypher's queries
+     */
+    private cypherQueries = {
         findUser: (email: string) => `
             MATCH (user: User { email: "${email}" })
             RETURN user
             LIMIT 1
         `,
         createUser: (email: string, password: string, name: string) => `
-            CREATE (user: User {
-                email: "${email}",
-                password: "${password}",
-                name: "${name}"
-            })
-            RETURN user
+            MATCH (role: Role { name: "user" })
+            CREATE
+                (user: User {
+                    email: "${email}",
+                    password: "${password}",
+                    name: "${name}"
+                }),
+                (user)-[:HAS_ROLE]->(role)
+            RETURN user { ._id, .email, .name } as user
+        `,
+        invalidateToken: (token: string) => `
+            CREATE (invalidToken: InvalidToken { token: "${token}" })
+            RETURN invalidToken
+        `,
+        isInvalidToken: (token: string) => `
+            MATCH (invalidToken: InvalidToken { token: "${token}" })
+            RETURN invalidToken
+            LIMIT 1
         `,
     };
 
-    runCypherQueries = {
-        findUser: (driver: Neo4j.Driver, email: string) => {
-            const session = driver.session();
+    /**
+     * Helper functions to run cypher's queries
+     */
+    private runCypherQueries = {
+        findUser: (email: string) => {
+            const session = this.driver.session();
             return session.run(this.cypherQueries.findUser(email))
                 .then(({ records: { 0: result } }) => result && result.get('user'));
         },
-        createUser: (driver: Neo4j.Driver, email: string, password: string, name: string) => {
-            const session = driver.session();
+        createUser: (email: string, password: string, name: string) => {
+            const session = this.driver.session();
             return session.run(this.cypherQueries.createUser(email, password, name))
-                .then(({ records: { 0: result } }) => result && result.get('user'));
+                .then(({ records: { 0: result } }) => {
+                    return result && result.get('user');
+                });
+        },
+        invalidateToken: (token: string) => {
+            const session = this.driver.session();
+            return session.run(this.cypherQueries.invalidateToken(token))
+                .then(({ records: { 0: result } }) => result && result.get('invalidToken'));
+        },
+        isInvalidToken: (token: string) => {
+            const session = this.driver.session();
+            return session.run(this.cypherQueries.isInvalidToken(token))
+                .then(({ records: { 0: result } }) => !!(result && result.get('invalidToken')));
         },
     };
 
-    constructor() {}
+    constructor(private driver: Neo4j.Driver) {}
 
-    isTokenProvidedInHeaders(req: Request) {
-        return req.headers.authorization && req.headers.authorization.includes('Bearer ');
+    private isTokenProvidedInHeaders(req: Request) {
+        return req.headers.authorization && req.headers.authorization.startsWith('Bearer ');
     }
-    isTokenProvidedInQuery(req: Request) {
+    private isTokenProvidedInQuery(req: Request) {
         return !!req.query.token;
     }
-    isTokenProvided(req: Request) {
-        return this.isTokenProvidedInHeaders(req) || this.isTokenProvidedInQuery(req);
-    }
 
-    retreiveTokenFromHeaders(req: Request) {
+    private retreiveTokenFromHeaders(req: Request) {
         return this.isTokenProvidedInHeaders(req)
             ? req.headers.authorization.split(' ')[1]
             : '';
     } 
-    retreiveTokenFromQuery(req: Request) {
+    private retreiveTokenFromQuery(req: Request) {
         return req.query.token || '';
     } 
+    
+    /**
+     * Check if `token` is provided in `Authorization` header or in `token`query param
+     */
+    isTokenProvided(req: Request) {
+        return this.isTokenProvidedInHeaders(req) || this.isTokenProvidedInQuery(req);
+    }
+
+    /**
+     * Retreive the `token` from `Authorization` header or from `token`query param
+     */
     retreiveToken(req: Request) {
         return this.retreiveTokenFromHeaders(req) || this.retreiveTokenFromQuery(req);
     }
 
+    /**
+     * Encode data as JWT
+     */
     encodeData(data: any) {
         return jwt.sign(data, this.secret);
     }
+    /**
+     * Decode data from JWT
+     */
     decodeData(token: string) {
         return jwt.decode(token);
     }
+    /**
+     * Decode data from JWT and verify it's signature
+     */
     verifyToken(token: string) {
         return jwt.verify(token, this.secret);
     }
 
+    /**
+     * Try ro retreive `token`
+     * If it is provided and it is a valid one, set `authenticated`, `user` and `token` in the Request object
+     * 
+     * Otherwise, don't do nothing
+     */
     augmentRequest(req: Request) {
         const token = this.retreiveToken(req);
         if (!token) {
-            return req;
+            return Promise.resolve(req);
         }
+        let user: any;
         try {
-            const user = this.verifyToken(token);
-            req['authenticated'] = !!user;
-            req['user'] = user;
-            req['token'] = token;
+            user = this.verifyToken(token);
         } catch (error) {
-            return req;
+            return Promise.resolve(req);
         }
-        return req;
+        return this.runCypherQueries.isInvalidToken(token)
+            .then(invalid => {
+                if (!invalid) {
+                    req['authenticated'] = !!user;
+                    req['user'] = user;
+                    req['token'] = token;
+                }
+                return req;
+            });
     }
 
-    signupMiddleware() {
-        return (req: Request, res: Response, next: NextFunction) =>  {
+    /**
+     * Create an user Object and assign to it the `user` role
+     */
+    signup() {
+        return (req: Request, res: Response) =>  {
             const { email, password, name } = req.body;
-            const driver = req['driver'];
             if (!(email && password && name)) {
                 const missingFields = ['email', 'password', 'name']
                     .filter(param => req.body[param] === undefined)
@@ -96,30 +160,33 @@ export class AuthHandler {
                 res.status(400).send({ message: `Missing fields: [${missingFields}]` });
                 return ;
             }
-            this.runCypherQueries.findUser(driver, email)
+            this.runCypherQueries.findUser(email)
                 .then(user => {
                     if (user) {
                         res.status(400).send({ message: `Email already exists` });
                         return ;
                     }
-                    return this.runCypherQueries.createUser(driver, email, password, name)
+                    return this.runCypherQueries.createUser(email, password, name)
                         .then(created => {
                             if (!created) {
                                 res.status(500).send({ message: `Something went wrong` });
                                 return ;
                             }
-                            delete created.properties.password;
-                            res.send({ user: created.properties });
+                            res.send({ user: created });
                         });
                 })
                 .catch(error => {
+                    console.log(error);
                     res.status(500).send({ message: `Something went wrong`, error });
                 });
         };
     }
     
-    signinMiddleware() {
-        return (req: Request, res: Response, next: NextFunction) =>  {
+    /**
+     * Sign an user in
+     */
+    signin() {
+        return (req: Request, res: Response) =>  {
             const { email, password } = req.body;
             if (!(email && password)) {
                 const missingFields = ['email', 'password']
@@ -128,27 +195,45 @@ export class AuthHandler {
                 res.status(400).send({ message: `Missing fields: [${missingFields}]` });
                 return ;
             }
-            this.runCypherQueries.findUser(req['driver'], email)
+            this.runCypherQueries.findUser(email)
                 .then(user => {
                     if (!user || user.properties.password !== password) {
                         res.status(500).send({ message: `Wrong credentials` });
                         return ;
                     }
-                    delete user.properties.password;
                     const token = this.encodeData(user.properties);
+                    delete user.properties.password;
                     res.send({ user: user.properties, token });
                 })
                 .catch(error => {
+                    console.log(error);
                     res.status(500).send({ message: `Something went wrong`, error });
                 });
         };
     }
     
-    signoutMiddleware() {
-        return (req: Request, res: Response, next: NextFunction) =>  {};
+    
+    /**
+     * Sign an user out
+     */
+    signout() {
+        return (req: Request, res: Response) =>  {
+            const token = req['token'];
+            this.runCypherQueries.invalidateToken(token)
+                .then(() => {
+                    res.send({});
+                })
+                .catch(error => {
+                    console.log(error);
+                    res.status(500).send({ message: `Something went wrong`, error });
+                });
+        };
     }
-
-    isLoggedMiddleware() {
+    
+    /**
+     * Is Authenticated middleware
+     */
+    isAuthenticated() {
         return (req: Request, res: Response, next: NextFunction) => {
             if (!req['authenticated']) {
                 res.status(401).send({ message: 'Not authorized' });
@@ -158,10 +243,12 @@ export class AuthHandler {
         };
     }
 
-    authMiddleware() {
+    /**
+     * Authentication helper middleware (use it everywhere you want to have authentication support)
+     */
+    auth() {
         return (req: Request, res: Response, next: NextFunction) => {
-            this.augmentRequest(req);
-            next();
+            this.augmentRequest(req).then(() => next());
         };
     }
 
