@@ -21,13 +21,6 @@ export const resolvers = {
         CreateUser: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
         UpdateUser: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
         DeleteUser: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        AddUserRoles: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        RemoveUserRoles: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        CreateRole: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        UpdateRole: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        DeleteRole: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        AddRoleUsers: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
-        RemoveRoleUsers: (parent: any, args: any, ctx: any, infos: any) => ifAdmin(parent, args, ctx, infos),
     }
 };
 

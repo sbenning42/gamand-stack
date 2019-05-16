@@ -1,20 +1,26 @@
+scalar JSON
+
 enum Role {
     user
     admin
-}
-
-type Attribute {
-    name: String!
-    json: JSON
 }
 
 type User @isAuthenticated {
     email: String!
     name: String
     roles: [Role]!
-    attributes: []
+    todos: [TodoOwner]
 }
 
-type HasAttribute @relation(name: "HAS_ATTRIBUTE") {
-    
+type Todo @isAuthenticated {
+    id: String!
+    title: String!
+    json: JSON
+    owner: TodoOwner!
+}
+
+type TodoOwner @relation(name: "TODO_OWNER") {
+    from: User
+    to: Todo
+    createdAt: DateTime!
 }
