@@ -29,6 +29,11 @@ const driver = Neo4j.driver(NEO_URI, Neo4j.auth.basic(NEO_USR, NEO_PWD));
 const auth = new AuthHandler(driver);
 
 /**
+ * Close Neo4j Driver on finish
+ */
+const finish = (req, res, next) => res.on('finish', () => driver.close()) && next();
+
+/**
  * Define some REST endpoints / middleware to handle authentication with AuthHandler helper object.
  * 
  * In this setup SRV_PATH is protected by JWT.
@@ -39,12 +44,13 @@ const endpoints = {
         cors(),
         bodyParser.urlencoded({ extended: true }),
         bodyParser.json(),
-        auth.auth()
+        finish,
+        auth.auth() // Add req.roles, req.user, req.token, req.authenticated to express Request object if token is provided
     ],
-    '/signup': [auth.signup()],
-    '/signin': [auth.signin()],
-    '/signout': [auth.isAuthenticated(), auth.signout()],
-    [SRV_PATH]: [auth.isAuthenticated()],
+  //  [SRV_PATH]: [auth.isAuthenticated()],
+    '/signup': [auth.signup()], // { email, password, name } = req.body; ...; res.send({ user })
+    '/signin': [auth.signin()], // { email, password } = req.body; ...; res.send({ user, token })
+    '/signout': [auth.isAuthenticated(), auth.signout()], // res.send({})
 };
 
 /**
@@ -57,21 +63,25 @@ Object.keys(endpoints).forEach(endpoint => app.use(endpoint, ...endpoints[endpoi
  *  - the Neo4j driver in the `context`
  *  - this neo4j-graphql-js augmented schema
  * 
- * You can add resolver's middleware into the `context` function.
- * 
  * You can exclude generated queries / mutations from GQL_FILE by passing them as `exclude` to `config` object.
  * You may define your own resolvers (or extends the generated ones) by passing them to the `resolvers` object.
+ * 
+ * You may use custom middlewares in resolvers function
  *  
  */
 const server = new ApolloServer({
-    playground: !!PLAYGROUND,
+    playground: !!PLAYGROUND, // disable in production
     context: ({ req, res }) => ({ req, res, driver, auth }),
     schema: makeAugmentedSchema({
         typeDefs: fs.readFileSync(GQL_FILE, 'utf8'),
         resolvers: resolvers,
         config: {
             query: { exclude: [] },
-            mutation: { exclude: [] }
+            mutation: { exclude: [] },
+            auth: {
+                isAuthenticated: true,
+                hasRole: true
+            }
         }
     }),
 });

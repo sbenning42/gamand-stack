@@ -2,6 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import jwt from 'jsonwebtoken';
 import { v1 as Neo4j } from 'neo4j-driver';
 
+const close = (session: Neo4j.Session) => {
+    return (data: any) => {
+        session.close();
+        return data;
+    }
+};
+
 export class AuthHandler {
 
     /**
@@ -18,6 +25,10 @@ export class AuthHandler {
             RETURN user
             LIMIT 1
         `,
+        findUserRoles: (email: string) => `
+            MATCH (user: User { email: "${email}" })-[:HAS_ROLE]->(roles: Role)
+            RETURN roles
+        `,
         createUser: (email: string, password: string, name: string) => `
             MATCH (role: Role { name: "user" })
             CREATE
@@ -31,7 +42,7 @@ export class AuthHandler {
         `,
         isAdminUser: (email: string) => `
                 MATCH (user: User { email: "${email}" })-[:HAS_ROLE]->(role: Role { name: "admin" })
-                RETURN user
+                RETURN user { ._id, .email, .name } as user
                 LIMIT 1
         `,
         invalidateToken: (token: string) => `
@@ -52,29 +63,38 @@ export class AuthHandler {
         findUser: (email: string) => {
             const session = this.driver.session();
             return session.run(this.cypherQueries.findUser(email))
-                .then(({ records: { 0: result } }) => result && result.get('user'));
+                .then(({ records: { 0: result } }) => result && result.get('user'))
+                .then(close(session));
+        },
+        findUserRoles: (email: string) => {
+            const session = this.driver.session();
+            return session.run(this.cypherQueries.findUserRoles(email))
+                .then(({ records }) => records && records.map(record => record && record.get('roles').properties))
+                .then(close(session));
         },
         createUser: (email: string, password: string, name: string) => {
             const session = this.driver.session();
             return session.run(this.cypherQueries.createUser(email, password, name))
-                .then(({ records: { 0: result } }) => {
-                    return result && result.get('user');
-                });
+                .then(({ records: { 0: result } }) => result && result.get('user'))
+                .then(close(session));
         },
         isAdminUser: (email: string) => {
             const session = this.driver.session();
             return session.run(this.cypherQueries.isAdminUser(email))
-                .then(({ records: { 0: result } }) => result && result.get('user'));
+                .then(({ records: { 0: result } }) => result && result.get('user'))
+                .then(close(session));
         },
         invalidateToken: (token: string) => {
             const session = this.driver.session();
             return session.run(this.cypherQueries.invalidateToken(token))
-                .then(({ records: { 0: result } }) => result && result.get('invalidToken'));
+                .then(({ records: { 0: result } }) => result && result.get('invalidToken'))
+                .then(close(session));
         },
         isInvalidToken: (token: string) => {
             const session = this.driver.session();
             return session.run(this.cypherQueries.isInvalidToken(token))
-                .then(({ records: { 0: result } }) => !!(result && result.get('invalidToken')));
+                .then(({ records: { 0: result } }) => !!(result && result.get('invalidToken')))
+                .then(close(session));
         },
     };
 
@@ -140,22 +160,28 @@ export class AuthHandler {
         if (!token) {
             return Promise.resolve(req);
         }
-        let user: any;
+        let claims: any;
         try {
-            user = this.verifyToken(token);
+            claims = this.verifyToken(token);
         } catch (error) {
             return Promise.resolve(req);
         }
         return this.runCypherQueries.isInvalidToken(token)
             .then(invalid => {
                 if (!invalid) {
-                    req['authenticated'] = !!user;
-                    req['user'] = user;
+                    claims.user.roles = claims.roles;
+                    req['authenticated'] = true;
+                    req['user'] = claims.user;
+                    req['roles'] = claims.roles;
                     req['token'] = token;
                 }
                 return req;
             });
     }
+
+    /**
+     * ALL FOLLOWING AUTH FUNCTION MUST RUN AFTER `this.auth()` MIDDLEWARE
+     */
 
     /**
      * Create an user Object and assign to it the `user` role
@@ -208,12 +234,20 @@ export class AuthHandler {
             this.runCypherQueries.findUser(email)
                 .then(user => {
                     if (!user || user.properties.password !== password) {
-                        res.status(500).send({ message: `Wrong credentials` });
+                        res.status(401).send({ message: `Wrong credentials` });
                         return ;
                     }
-                    const token = this.encodeData(user.properties);
-                    delete user.properties.password;
-                    res.send({ user: user.properties, token });
+                    this.runCypherQueries.findUserRoles(email)
+                        .then(roles => {
+                            console.log(roles);
+                            const claims = {
+                                user: user.properties,
+                                roles: roles
+                            };
+                            const token = this.encodeData(claims);
+                            delete user.properties.password;
+                            res.send({ user: user.properties, token });
+                        });
                 })
                 .catch(error => {
                     console.log(error);
@@ -245,14 +279,7 @@ export class AuthHandler {
      */
     isAuthenticated() {
         return (req: Request, res: Response, next: NextFunction) => {
-            const operationName = req.body.operationName;
-            if (operationName === 'IntrospectionQuery' || (req.body.query && req.body.query.includes('query IntrospectionQuery'))) {
-                console.log('You shall pass !');
-                next();
-                return ;
-            }
             if (!req['authenticated']) {
-                console.log('You shall NOT pass !', req.body);
                 res.status(401).send({ message: 'Not authorized' });
                 return ;
             }
@@ -267,16 +294,15 @@ export class AuthHandler {
         const user = req['user'];
         return this.runCypherQueries.isAdminUser(user && user.email)
             .then(user => {
-                if (!user) {
-                    res.status(401);
+                if (!(user && user.roles && user.roles.some((role: any) => role.name === 'admin'))) {
+                    res.status(401); // Do not res.send the error as GraphQL will further modify the Response object
                     throw new Error('Not authorized');
                 } else {
-                    req['admin'] = true;
                     return req;
                 }
             })
             .catch(error => {
-                res.status(401);
+                res.status(401); // Do not res.send the error as GraphQL will further modify the Response object
                 throw new Error('Not authorized');
             });
     }

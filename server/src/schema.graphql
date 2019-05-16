@@ -1,13 +1,20 @@
-type Role {
-    _id: ID!
-    name: String!
-    ring: Int!
-    users: [User] @relation(name: "HAS_ROLE" direction: "OUT")
+enum Role {
+    user
+    admin
 }
 
-type User {
-    _id: ID!
+type Attribute {
+    name: String!
+    json: JSON
+}
+
+type User @isAuthenticated {
     email: String!
     name: String
-    roles: [Role]! @relation(name: "HAS_ROLE" direction: "IN")
+    roles: [Role]!
+    attributes: []
+}
+
+type HasAttribute @relation(name: "HAS_ATTRIBUTE") {
+    
 }
