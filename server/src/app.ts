@@ -59,10 +59,7 @@ Object.keys(endpoints).forEach(endpoint => app.use(endpoint, ...endpoints[endpoi
  */
 const server = new ApolloServer({
     playground: !!PLAYGROUND,
-    context: ({ req }) => {
-        auth.augmentRequest(req);
-        return { req, driver };
-    },
+    context: ({ req }) => ({ req, driver }),
     schema: makeAugmentedSchema({
         typeDefs: fs.readFileSync(GQL_FILE, 'utf8'),
         resolvers: {},
